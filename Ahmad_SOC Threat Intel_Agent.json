@@ -1,0 +1,341 @@
+{
+  "name": "Ahmad_SOC Threat Intel_Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -768,
+        80
+      ],
+      "id": "42df8da5-6b13-49de-b939-e5dd250beab8",
+      "name": "IOC Input",
+      "webhookId": "6fe19c26-5082-4c12-94c3-8f34dfae2048"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/{{ $('IOC Type Detector').item.json.iocType === 'ip' ? 'ip_addresses/' + $('IOC Type Detector').item.json.iocValue : $('IOC Type Detector').item.json.iocType === 'domain' ? 'domains/' + $('IOC Type Detector').item.json.iocValue : $('IOC Type Detector').item.json.iocType === 'hash' ? 'files/' + $('IOC Type Detector').item.json.iocValue : 'urls' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "YOUR_VIRUSTOTAL_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        80
+      ],
+      "id": "68cd55d1-b794-44c1-a2ac-40b0171f0923",
+      "name": "VirusTotal Enrichment"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c4ace298-10a0-4e33-b79b-27903776dbcb",
+              "name": "vtdata",
+              "value": "={{ $('VirusTotal Enrichment').item.json.data.attributes.last_analysis_stats.malicious }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -208,
+        80
+      ],
+      "id": "ddb8c542-aeb8-480f-87c9-08d1a2a266b3",
+      "name": "VT Data Extract"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.abuseipdb.com/api/v2/check?ipAddress={{ $('IOC Input').item.json.chatInput }}&maxAgeInDays=90",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "YOUR_ABUSEIPDB_API_KEY_HERE"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        -80
+      ],
+      "id": "63dafc0e-1bf8-46ce-bcb8-3b6b2e363d3d",
+      "name": "AbuseIPDB Enrichment"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "92cc5652-f48f-435d-bc3e-2218b8fd14c3",
+              "name": "abuseScore",
+              "value": "={{ $('AbuseIPDB Enrichment').item.json.data.abuseConfidenceScore }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        -80
+      ],
+      "id": "9d74c4fc-7b86-4ee2-9552-b08d1b1ced5b",
+      "name": "AB Data Extract"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"model\":\"llama-3.1-8b-instant\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a SOC Tier-2 Analyst expert in MITRE ATT&CK framework. Analyze IOCs and map to MITRE tactics/techniques. Always provide structured analysis with MITRE mapping.\"},{\"role\":\"user\",\"content\":\"IOC: {{ $('IOC Type Detector').item.json.iocValue }}\\nIOC Type: {{ $('IOC Type Detector').item.json.iocType }}\\nVirusTotal Detections: {{ $('VT Data Extract').item.json.vtdata }}\\n{{ $('IOC Type Detector').item.json.iocType === 'ip' ? 'AbuseIPDB Confidence: ' + $('AB Data Extract').item.json.abuseScore + '%' : 'Note: AbuseIPDB only for IPs' }}\\n\\nProvide this exact structured format:\\n\\n**THREAT VERDICT:** [CLEAN/SUSPICIOUS/MALICIOUS]\\n**CONFIDENCE LEVEL:** [LOW/MEDIUM/HIGH/VERY HIGH]\\n\\n**MITRE ATT&CK MAPPING:**\\nTactic: [Tactic Name]\\nTechnique: [Technique ID] - [Technique Name]\\nConfidence: [HIGH/MEDIUM/LOW]\\n\\n**ANALYST SUMMARY:**\\n[2-3 sentences about the threat]\\n\\n**RECOMMENDED ACTION:**\\n[Specific action - Block/Monitor/Escalate/Close]\\n\\n**ADDITIONAL NOTES:**\\n[Any relevant context about the IOC type or threat behavior]\"}]}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        864,
+        144
+      ],
+      "id": "8ec6c9f7-f6d1-4a3d-8355-9968adc4116d",
+      "name": "Groq Analysis",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "G3dq3WXvdI5CgXhs",
+          "name": "Grok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.choices[0].message.content }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        96
+      ],
+      "id": "56e2c1ac-091f-43a1-9cf1-dc2f8b46a4be",
+      "name": "SOC Report Output"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "549737f8-ca13-4e21-8f95-b2833d0cabe1",
+              "name": "iocType",
+              "value": "={{ $json.chatInput.match(/^(\\d{1,3}\\.){3}\\d{1,3}$/) ? 'ip' : $json.chatInput.match(/^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$/) ? 'hash' : $json.chatInput.match(/^https?:\\/\\//) ? 'url' : 'domain' }}",
+              "type": "string"
+            },
+            {
+              "id": "e1072eee-544b-4b35-9014-135f1c494aad",
+              "name": "iocValue",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -592,
+        80
+      ],
+      "id": "9e04c1dd-440b-4c43-a2f7-7b1b5078713e",
+      "name": "IOC Type Detector"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0abf9de6-a76f-435b-ae69-265701b53500",
+              "leftValue": "={{ $('IOC Type Detector').item.json.iocType }}",
+              "rightValue": "ip",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16,
+        128
+      ],
+      "id": "21094fbc-6e74-47c4-9422-37c01c0c47ff",
+      "name": "Check if IP"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IOC Input": {
+      "main": [
+        [
+          {
+            "node": "IOC Type Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VirusTotal Enrichment": {
+      "main": [
+        [
+          {
+            "node": "VT Data Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT Data Extract": {
+      "main": [
+        [
+          {
+            "node": "Check if IP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AbuseIPDB Enrichment": {
+      "main": [
+        [
+          {
+            "node": "AB Data Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AB Data Extract": {
+      "main": [
+        [
+          {
+            "node": "Groq Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Analysis": {
+      "main": [
+        [
+          {
+            "node": "SOC Report Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IOC Type Detector": {
+      "main": [
+        [
+          {
+            "node": "VirusTotal Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if IP": {
+      "main": [
+        [
+          {
+            "node": "AbuseIPDB Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6a814dec-a9fa-4f5a-acf2-e41b13a73b64",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2c4a3da4395db1e034fed32c028ccd66aeee0dec204a8b515c4a3af60c251c0b"
+  },
+  "nodeGroups": [],
+  "id": "9lzWsEerTyEFfhvC",
+  "tags": []
+}
